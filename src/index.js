@@ -36,8 +36,8 @@ try {
 }
 
 // Define slash commands
-const removeReminderCommand = new SlashCommandBuilder()
-    .setName('removereminder')
+const BssRemoverCommand = new SlashCommandBuilder()
+    .setName('bssremover') // Change the name to lowercase
     .setDescription('Remove a specific reminder')
     .addIntegerOption((option) =>
         option
@@ -47,8 +47,9 @@ const removeReminderCommand = new SlashCommandBuilder()
     )
     .toJSON();
 
-const listRemindersCommand = new SlashCommandBuilder()
-    .setName('listreminders')
+
+const bsslistCommand = new SlashCommandBuilder()
+    .setName('bsslist')
     .setDescription('List all active reminders')
     .toJSON();
 
@@ -69,27 +70,23 @@ const bssCommand = new SlashCommandBuilder()
             )
             .setRequired(true)
     )
-    .addMentionableOption((option) =>
-        option
-            .setName('mention')
-            .setDescription('Who to mention when the reminder is finished')
-            .setRequired(true)
-    )
     .addChannelOption((option) =>
         option
             .setName('channel')
             .setDescription('The channel the message should be sent to')
             .addChannelTypes(ChannelType.GuildText)
-            .setRequired(true)
+            .setRequired(false)
     )
     .toJSON();
 
-const commands = [removeReminderCommand, listRemindersCommand, bssCommand];
+const commands = [BssRemoverCommand, bsslistCommand, bssCommand];
 
 // Function to check and execute reminders on bot startup
 async function checkReminders() {
-    for (const reminder of reminders) {
-        if (reminder.scheduledTime > Math.floor(Date.now() / 1000)) {
+    for (let i = 0; i < reminders.length; i++) {
+        const reminder = reminders[i];
+
+        if (reminder.scheduledTime <= Math.floor(Date.now() / 1000)) {
             const user = await client.users.fetch(reminder.user);
             const channel = await client.channels.fetch(reminder.channel);
 
@@ -98,6 +95,12 @@ async function checkReminders() {
             } catch (error) {
                 console.error('Error sending scheduled message:', error);
             }
+
+            // Remove the processed reminder from the array
+            reminders.splice(i, 1);
+            i--; // Adjust index to account for the removed element
+
+            await saveReminders();
         }
     }
 }
@@ -119,11 +122,6 @@ async function registerCommands() {
             body: commands,
         });
 
-        // Register global commands
-        await rest.put(Routes.applicationCommands(CLIENT_ID), {
-            body: [listRemindersCommand], // Add global commands here
-        });
-
         console.log('Commands registered successfully!');
     } catch (error) {
         console.error('Error registering commands:', error);
@@ -134,7 +132,7 @@ async function registerCommands() {
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isCommand()) {
         switch (interaction.commandName) {
-            case 'removereminder':
+            case 'bssremover':
                 try {
                     const indexToRemove = interaction.options.getInteger('index');
 
@@ -153,7 +151,7 @@ client.on('interactionCreate', async (interaction) => {
                         });
                     }
                 } catch (error) {
-                    console.error('Error handling removereminder command:', error);
+                    console.error('Error handling bssremover command:', error);
                     await interaction.reply({
                         content: 'An error occurred while processing the command.',
                         ephemeral: true,
@@ -161,7 +159,7 @@ client.on('interactionCreate', async (interaction) => {
                 }
                 break;
 
-            case 'listreminders':
+            case 'bsslist':
                 try {
                     const reminderList = reminders.map((reminder) => ({
                         user: reminder.user,
@@ -170,12 +168,21 @@ client.on('interactionCreate', async (interaction) => {
                         scheduledTime: new Date(reminder.scheduledTime * 1000).toLocaleString(),
                     }));
 
-                    await interaction.reply({
-                        content: `**Active Reminders:**\n${JSON.stringify(reminderList, null, 2)}`,
-                        ephemeral: true,
-                    });
+                    // Split the reminderList into chunks of 10 reminders for better readability
+                    const chunks = [];
+                    for (let i = 0; i < reminderList.length; i += 10) {
+                        chunks.push(reminderList.slice(i, i + 10));
+                    }
+
+                    // Send each chunk as a separate message
+                    for (const chunk of chunks) {
+                        await interaction.reply({
+                            content: `**Active Reminders:**\n${JSON.stringify(chunk, null, 2)}`,
+                            ephemeral: true,
+                        });
+                    }
                 } catch (error) {
-                    console.error('Error handling listreminders command:', error);
+                    console.error('Error handling Bsslist command:', error);
                     await interaction.reply({
                         content: 'An error occurred while processing the command.',
                         ephemeral: true,
@@ -186,8 +193,9 @@ client.on('interactionCreate', async (interaction) => {
             case 'bss':
                 try {
                     const time = interaction.options.getInteger('reminder');
-                    const channel = interaction.options.getChannel('channel');
-                    const user = interaction.options.getMentionable('mention');
+                    const selectedChannel = interaction.options.getChannel('channel');
+                    const channel = selectedChannel ? selectedChannel.id : interaction.channel?.id;
+                    const user = interaction.user;
 
                     function getmessage(optionMessage) {
                         switch (optionMessage) {
@@ -230,7 +238,7 @@ client.on('interactionCreate', async (interaction) => {
 
                     reminders.push({
                         user: user.id,
-                        channel: channel.id,
+                        channel: channel,
                         message: `${returnmessage} ${user}`,
                         scheduledTime: epochTime,
                     });
@@ -244,7 +252,14 @@ client.on('interactionCreate', async (interaction) => {
 
                     schedule.scheduleJob(scheduledDate, async () => {
                         try {
-                            await channel.send({ content: `${returnmessage} ${user}` });
+                            if (channel) {
+                                const channelObject = client.channels.cache.get(channel);
+                                if (channelObject) {
+                                    await channelObject.send({ content: `${returnmessage} ${user}` });
+                                } else {
+                                    console.error(`Channel ${channel} not found.`);
+                                }
+                            }
                         } catch (error) {
                             console.error('Error sending scheduled message:', error);
                         }
