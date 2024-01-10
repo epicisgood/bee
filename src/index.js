@@ -118,9 +118,10 @@ async function saveReminders() {
 async function registerCommands() {
     try {
         // Register guild-specific commands
-        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
+        await rest.put(Routes.applicationCommands(CLIENT_ID), {
             body: commands,
         });
+        
 
         console.log('Commands registered successfully!');
     } catch (error) {
@@ -165,7 +166,7 @@ client.on('interactionCreate', async (interaction) => {
                         user: reminder.user,
                         channel: reminder.channel,
                         message: reminder.message,
-                        scheduledTime: new Date(reminder.scheduledTime * 1000).toLocaleString(),
+                        scheduledTime: `<t:${reminder.scheduledTime}:R> <t:${reminder.scheduledTime}:T>`,
                     }));
 
                     // Split the reminderList into chunks of 10 reminders for better readability
