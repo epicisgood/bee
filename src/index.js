@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { config } from 'dotenv';
-import { Client, Routes, SlashCommandBuilder, ChannelType } from 'discord.js';
+import { Client, Routes, SlashCommandBuilder, ChannelType, IntentsBitField } from 'discord.js';
 import { REST } from '@discordjs/rest';
 import schedule from 'node-schedule';
 import fs from 'fs/promises';
@@ -12,7 +12,15 @@ const TOKEN = process.env.BOT_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = '1100867342461833228';
 
-const client = new Client({ intents: [] });
+let reminders = [];
+
+const client = new Client({
+    intents: [
+        IntentsBitField.Flags.Guilds,
+        IntentsBitField.Flags.MessageContent,
+        IntentsBitField.Flags.GuildMessages
+    ]
+});
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,7 +28,6 @@ const __dirname = dirname(__filename);
 
 const remindersFilePath = join(__dirname, 'reminders.json');
 
-let reminders = [];
 
 try {
     const data = await fs.readFile(remindersFilePath, 'utf-8');
@@ -66,7 +73,7 @@ const bssCommand = new SlashCommandBuilder()
                 { name: 'King beetle', value: 86400000 },
                 { name: 'Coconut Crab', value: 129600000 },
                 { name: 'Tunnel Bear', value: 172800000 },
-                { name: 'Testing', value: 3600 }
+                { name: 'Testing', value: 10000 }
             )
             .setRequired(true)
     )
@@ -105,6 +112,8 @@ async function checkReminders() {
     }
 }
 
+checkReminders()
+
 // Function to save reminders to the file
 async function saveReminders() {
     try {
@@ -121,7 +130,7 @@ async function registerCommands() {
         await rest.put(Routes.applicationCommands(CLIENT_ID), {
             body: commands,
         });
-        
+
 
         console.log('Commands registered successfully!');
     } catch (error) {
@@ -277,8 +286,18 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
+
+
+
+
 // Register commands on bot startup
 registerCommands();
 
 // Start the bot
 client.login(TOKEN);
+
+
+client.on('ready', () => {
+    console.log(`${client.user.tag} is working`)
+})
+
